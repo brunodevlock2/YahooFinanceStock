@@ -37,12 +37,11 @@ namespace FinanceStock.Controllers
             {
                 _oauthService.SetRequestedSymbol(symbol);
 
-                return Authorize(symbol);
+                return RedirectToAction("Authorize", new { symbol });
             }
 
-            return RedirectToAction("FetchPriceVariation");
+            return RedirectToAction("FetchPriceVariation", new { symbol });
         }
-
 
         [HttpGet("authorize")]
         public IActionResult Authorize(string symbol)
@@ -88,7 +87,6 @@ namespace FinanceStock.Controllers
         {
             try
             {
-                // Utilize o accessToken para buscar dados da API do Yahoo
                 JObject yahooFinanceData = await _financeService.GetStockDataAsync(symbol, OAuthService.AccessToken);
                 var pricesToSave = ParseYahooFinanceData(yahooFinanceData, symbol);
 

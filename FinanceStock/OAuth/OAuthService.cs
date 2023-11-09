@@ -16,7 +16,9 @@ public class OAuthService
     public static string AccessToken { get; set; }
     public static string RequestedSymbol { get; set; }
     public static string Symbol { get; private set; }
-
+    const string id = "dj0yJmk9azVYZHVIWklVV1dzJmQ9WVdrOVVXbFVSRTVpVEZFbWNHbzlNQT09JnM9Y29uc3VtZXJzZWNyZXQmc3Y9MCZ4PTE3";
+    const string secret = "QiTDNbLQ";
+    
     public OAuthService(HttpClient httpClient, IOptions<OAuthConfig> options)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
@@ -32,8 +34,8 @@ public class OAuthService
     {
         var queryParams = new Dictionary<string, string>
         {
-            { "client_id", _config.ClientId },
-            { "redirect_uri", _config.RedirectUri },
+            { "client_id", id },
+            { "redirect_uri", "https://localhost:5001/stock/callback" },
             { "response_type", "code" },
             { "language", "en-us" } 
         };
@@ -48,13 +50,13 @@ public class OAuthService
     {
         string tokenUrl = "https://api.login.yahoo.com/oauth2/get_token";
        
-        string clientCredentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_config.ClientId}:{_config.ClientSecret}"));
+        string clientCredentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{id}:{secret}"));
        
         var requestData = new Dictionary<string, string>
         {
             { "grant_type", "authorization_code" }, 
             { "code", authorizationCode },         
-            { "redirect_uri", _config.RedirectUri } 
+            { "redirect_uri", "https://localhost:5001/stock/callback" } 
         };
 
         var requestContent = new FormUrlEncodedContent(requestData);
