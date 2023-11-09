@@ -26,56 +26,100 @@ namespace FinanceStock.Controllers
         }
 
         [HttpGet("{symbol}")]
-        public async Task<ActionResult<IEnumerable<StockPriceDto>>> GetPriceVariation(string symbol)
+        public IActionResult GetPriceVariation(string symbol)
         {
-          
             if (string.IsNullOrWhiteSpace(symbol))
             {
                 return BadRequest("Symbol cannot be empty.");
             }
 
+            if (string.IsNullOrWhiteSpace(OAuthService.AccessToken))
+            {
+                _oauthService.SetRequestedSymbol(symbol);
+
+                return Authorize(symbol);
+            }
+
+            return RedirectToAction("FetchPriceVariation");
+        }
+
+
+        [HttpGet("authorize")]
+        public IActionResult Authorize(string symbol)
+        {
+            _oauthService.SetRequestedSymbol(symbol);
+            var authorizationUrl = _oauthService.GetAuthorizationUrl();
+           
+            return Redirect(authorizationUrl);
+        }
+
+        [HttpGet("callback")]
+        public async Task<IActionResult> Callback()
+        {
+            var code = HttpContext.Request.Query["code"];
+            if (!string.IsNullOrEmpty(code))
+            {
+                try
+                {
+                    string accessToken = await _oauthService.GetAccessTokenAsync(code);
+                    OAuthService.AccessToken = accessToken;
+
+                    var symbol = OAuthService.Symbol;
+                    if (string.IsNullOrWhiteSpace(symbol))
+                    {
+                        return BadRequest("Symbol not provided.");
+                    }
+                   
+                    return RedirectToAction("FetchPriceVariation", new { symbol });
+                }       
+                catch (Exception ex)
+                {
+                    return StatusCode(500, $"An error occurred while processing your request: {ex.Message}");
+                }
+            }
+            else
+            {
+                return BadRequest("Authorization code is missing in the request.");
+            }
+        }
+
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<StockPriceDto>>> FetchPriceVariation(string symbol)
+        {
             try
             {
-                string accessToken = await _oauthService.GetAccessTokenAsync();
-                JObject yahooFinanceData = await _financeService.GetStockDataAsync(symbol, accessToken);
+                // Utilize o accessToken para buscar dados da API do Yahoo
+                JObject yahooFinanceData = await _financeService.GetStockDataAsync(symbol, OAuthService.AccessToken);
+                var pricesToSave = ParseYahooFinanceData(yahooFinanceData, symbol);
 
-                var pricesToSave = new List<StockPrice>();
-
-                JObject? results = yahooFinanceData?["chart"]["result"]?.FirstOrDefault() as JObject;
-                if (results != null)
-                {
-                    var timestamps = results["timestamp"]?.ToObject<long[]>();
-                    var quotes = results["indicators"]["quote"]?.FirstOrDefault() as JObject;
-
-                    if (quotes != null)
-                    {
-                        var opens = quotes["open"]?.ToObject<decimal?[]>();
-                        for (int i = 0; i < timestamps?.Length; i++)
-                        {
-                            if (opens[i].HasValue)
-                            {
-                                var date = DateTimeOffset.FromUnixTimeSeconds(timestamps[i]).UtcDateTime;
-                                pricesToSave.Add(new StockPrice
-                                {
-                                    Date = date,
-                                    Symbol = symbol,
-                                    OpenPrice = opens[i].Value
-                                });
-                            }
-                        }
-                    }
-                }
-               
                 await SaveStockDataAsync(pricesToSave);
-               
                 var priceDtos = await CalculatePriceVariation(symbol);
 
                 return Ok(priceDtos);
-            }
-            catch (Exception)
+            }        
+            catch (Exception ex)
             {
-                return StatusCode(500, "An error occurred while processing your request.");
+                return StatusCode(500, $"An error occurred while processing your request: {ex.Message}");
             }
+        }
+
+        private List<StockPrice> ParseYahooFinanceData(JObject yahooFinanceData, string symbol)
+        {
+            var results = yahooFinanceData["chart"]["result"]?.First;
+            var timestamps = results?["timestamp"]?.ToObject<long[]>() ?? Array.Empty<long>();
+            var quotes = results?["indicators"]["quote"]?.First;
+
+            var opens = quotes?["open"]?.ToObject<decimal?[]>() ?? Array.Empty<decimal?>();
+
+            return timestamps.Zip(opens, (timestamp, open) => new { timestamp, open })
+                            .Where(tp => tp.open.HasValue)
+                            .Select(tp => new StockPrice
+                            {
+                                Date = DateTimeOffset.FromUnixTimeSeconds(tp.timestamp).UtcDateTime,
+                                Symbol = symbol,
+                                OpenPrice = tp.open.Value
+                            })
+                            .ToList();
         }
 
         private async Task SaveStockDataAsync(List<StockPrice> prices)

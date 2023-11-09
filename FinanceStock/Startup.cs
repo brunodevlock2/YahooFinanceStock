@@ -26,7 +26,7 @@ public class Startup
 
         services.AddScoped<OAuthService>();
         services.AddScoped<YahooFinanceService>();
-        services.AddScoped<OAuthConfig>();
+        services.Configure<OAuthService.OAuthConfig>(Configuration.GetSection("Section:OAuthConfig"));
        
         services.AddSwaggerGen(c =>
         {
@@ -38,7 +38,7 @@ public class Startup
     {
         
         app.UseHttpsRedirection();
-
+       
         app.UseRouting();
 
         app.UseAuthentication();
